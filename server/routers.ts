@@ -160,7 +160,7 @@ export const appRouter = router({
       const externalId = randomUUID();
       const expiryTime = Date.now() + input.durationDays * 24 * 60 * 60 * 1000;
       try {
-        await new XuiApi(node).addClient(inbound.remoteId, { id: externalId, email: username, totalGB: Math.round(input.trafficGb * 1024 ** 3), expiryTime, limitIp: input.ipLimit, enable: true });
+        await new XuiApi(node).addClient(inbound.remoteId, { id: externalId, email: username, totalGB: Math.round(input.trafficGb), expiryTime, limitIp: input.ipLimit, enable: true });
         const client = await createClientForReseller({ reseller, nodeId: node.id, inboundId: inbound.id, externalId, baseName: input.baseName, trafficGb: input.trafficGb.toFixed(2), ipLimit: input.ipLimit, durationDays: input.durationDays, notes: input.notes });
         await writeAuditLog({ actorUserId: ctx.user.id, resellerId: reseller.id, action: "client.created_in_xui", target: client.username, metadata: JSON.stringify({ nodeId: node.id, inboundId: inbound.id, externalId }) });
         return client;

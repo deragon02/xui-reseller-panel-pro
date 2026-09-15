@@ -254,11 +254,11 @@ Only expose the HTTPS endpoint to end users.
 
 ## Versioning and updates
 
-The current release is defined in both `package.json` and `shared/version.ts`. The current feature release is `1.1.0`; the starting release was `1.0.0`. Use Semantic Versioning:
+The current release is defined in both `package.json` and `shared/version.ts`. The current feature release is `1.1.1`; the starting release was `1.0.0`. Use Semantic Versioning:
 
 ```text
 1.0.0 -> initial release
-1.1.0 -> backward-compatible feature
+1.1.1 -> backward-compatible feature
 1.1.1 -> bug/security fix
 2.0.0 -> breaking change
 ```
@@ -303,7 +303,7 @@ An admin can add one or more 3x-ui nodes from the dashboard by entering a name, 
 
 When a reseller creates a client, the backend checks the reseller status, confirms that the selected inbound belongs to the selected node, verifies the reseller grant and quota, calls the 3x-ui API, and stores the returned external client identifier locally. API tokens are encrypted with AES-256-GCM and never returned to the frontend.
 
-The current adapter uses the common token and endpoint conventions: `Authorization: Bearer`, `/panel/api/inbounds/list`, and `/panel/api/inbounds/addClient`. Endpoint and token behavior can vary by 3x-ui release, so verify them in the authenticated API Docs for the deployed version before production use.
+The current adapter targets the latest official release verified during this update, **3x-ui v3.8.0**: `Authorization: Bearer`, `/panel/api/inbounds/list`, and `/panel/api/clients/add` with the `client + inboundIds` payload. Endpoint and token behavior can vary by release, so verify them in the authenticated API Docs for the deployed version before production use.
 
 ## Security checklist
 

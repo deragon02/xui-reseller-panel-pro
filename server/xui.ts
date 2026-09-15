@@ -68,15 +68,23 @@ export class XuiApi {
   }
 
   async addClient(inboundId: number, payload: XuiClientPayload) {
-    const response = await this.client.post("/panel/api/inbounds/addClient", {
-      id: inboundId,
-      settings: JSON.stringify({ clients: [{ ...payload }] }),
+    const response = await this.client.post("/panel/api/clients/add", {
+      client: {
+        id: payload.id,
+        email: payload.email,
+        security: "auto",
+        limitIp: payload.limitIp,
+        totalGB: payload.totalGB,
+        expiryTime: payload.expiryTime,
+        enable: payload.enable ?? true,
+      },
+      inboundIds: [inboundId],
     });
     return this.unwrap<any>(response, "client creation");
   }
 
-  async deleteClient(clientId: string) {
-    const response = await this.client.post(`/panel/api/inbounds/delClient/${encodeURIComponent(clientId)}`);
+  async deleteClient(email: string) {
+    const response = await this.client.post(`/panel/api/clients/del/${encodeURIComponent(email)}`);
     return this.unwrap<any>(response, "client deletion");
   }
 }

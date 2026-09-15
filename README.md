@@ -382,7 +382,7 @@ sara-BX-02
 
 پس از بررسی، Client واقعی از مسیر API استاندارد پنل 3x-ui در Inbound انتخاب‌شده ساخته می‌شود و شناسه خارجی آن در دیتابیس محلی ثبت می‌گردد. Token با AES-256-GCM رمزنگاری می‌شود و هرگز به Frontend برگردانده نمی‌شود.
 
-> API پنل‌های ثنایی ممکن است بر اساس نسخه و تنظیمات Token تفاوت داشته باشد. Adapter فعلی از API Token با Header `Authorization: Bearer` و مسیرهای رایج `/panel/api/inbounds/list` و `/panel/api/inbounds/addClient` استفاده می‌کند. قبل از Production، این مسیرها را در API Docs نسخه دقیق پنل خود تأیید کنید.
+> بر اساس آخرین Release رسمی فعلی یعنی **3x-ui v3.8.0**، Adapter از API Token با Header `Authorization: Bearer`، مسیر `/panel/api/inbounds/list` و مسیر ساخت Client یعنی `/panel/api/clients/add` با بدنه `client + inboundIds` استفاده می‌کند. قبل از Production، API Docs نسخه نصب‌شده را نیز تأیید کنید.
 
 ## امنیت و توصیه‌های عملیاتی
 
@@ -453,12 +453,12 @@ docs/env.template               نمونه تنظیمات محیطی بدون Se
 
 ## نسخه‌بندی و به‌روزرسانی
 
-نسخه فعلی پروژه در `package.json` و `shared/version.ts` تعریف شده است و در این مرحله **1.1.0** است. نسخه اولیه `1.0.0` بود و اتصال واقعی 3x-ui در این انتشار اضافه شده است. برای نسخه‌های بعدی، مقدار `version` را با الگوی Semantic Versioning تغییر دهید:
+نسخه فعلی پروژه در `package.json` و `shared/version.ts` تعریف شده است و در این مرحله **1.1.1** است. نسخه اولیه `1.0.0` بود و اتصال واقعی 3x-ui در این انتشار اضافه شده است. برای نسخه‌های بعدی، مقدار `version` را با الگوی Semantic Versioning تغییر دهید:
 
 ```text
 MAJOR.MINOR.PATCH
 1.0.0  → نسخه اولیه
-1.1.0  → قابلیت جدید بدون ناسازگاری
+1.1.1  → قابلیت جدید بدون ناسازگاری
 1.1.1  → اصلاح خطا یا وصله امنیتی
 2.0.0  → تغییر ناسازگار در API یا معماری
 ```
