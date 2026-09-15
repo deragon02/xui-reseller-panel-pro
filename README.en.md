@@ -2,7 +2,7 @@
 
 A standalone Persian/RTL reseller management panel for 3x-ui / X-UI deployments. The application uses React, Node.js, Express, tRPC, Drizzle ORM, and MySQL.
 
-> **Current status:** this repository contains a runnable MVP. It implements reseller management, unique suffix codes, ownership boundaries, quotas, credit accounting, activity logs, version display, and GitHub release checks. The production connector that creates and manages real clients through the 3x-ui API is intentionally not enabled yet.
+> **Current status:** this repository contains a runnable MVP with a real 3x-ui API adapter. It implements reseller management, unique suffix codes, ownership boundaries, quotas, credit accounting, activity logs, multi-node management, inbound synchronization, access grants, and real client creation through the API. Verify the adapter paths against the exact 3x-ui version before production use.
 
 ## Quick Install
 
@@ -152,6 +152,7 @@ Required values include:
 ```env
 DATABASE_URL=mysql://xui_reseller_app:YOUR_PASSWORD@127.0.0.1:3306/xui_reseller
 JWT_SECRET=GENERATE_A_LONG_RANDOM_SECRET
+XUI_TOKEN_ENCRYPTION_KEY=GENERATE_ANOTHER_LONG_RANDOM_SECRET
 VITE_APP_ID=YOUR_MANUS_OAUTH_APP_ID
 OAUTH_SERVER_URL=https://api.manus.im
 VITE_OAUTH_PORTAL_URL=https://auth.manus.im
@@ -253,7 +254,7 @@ Only expose the HTTPS endpoint to end users.
 
 ## Versioning and updates
 
-The current release is defined in both `package.json` and `shared/version.ts`. The starting version is `1.0.0`. Use Semantic Versioning:
+The current release is defined in both `package.json` and `shared/version.ts`. The current feature release is `1.1.0`; the starting release was `1.0.0`. Use Semantic Versioning:
 
 ```text
 1.0.0 -> initial release
@@ -296,18 +297,13 @@ sudo mysqldump --single-transaction xui_reseller \
   | gzip | sudo tee /var/backups/xui-reseller/db-$(date -u +%Y%m%d-%H%M%S).sql.gz >/dev/null
 ```
 
-## 3x-ui integration boundary
+## 3x-ui integration
 
-This MVP does not yet create real clients inside 3x-ui. The next integration layer must add:
+An admin can add one or more 3x-ui nodes from the dashboard by entering a name, HTTPS base URL, and API token. The backend tests the connection and synchronizes the available inbounds. The admin then selects which nodes and inbounds each reseller may use.
 
-- secure Node/panel credential storage;
-- strict TLS and destination validation;
-- inbound selection and Client creation;
-- renew, disable, delete, and usage synchronization;
-- idempotency for retries;
-- logs that never expose credentials or private subscription URLs.
+When a reseller creates a client, the backend checks the reseller status, confirms that the selected inbound belongs to the selected node, verifies the reseller grant and quota, calls the 3x-ui API, and stores the returned external client identifier locally. API tokens are encrypted with AES-256-GCM and never returned to the frontend.
 
-Do not treat a successful local database insert as proof that a 3x-ui client was created until this adapter is implemented and tested.
+The current adapter uses the common token and endpoint conventions: `Authorization: Bearer`, `/panel/api/inbounds/list`, and `/panel/api/inbounds/addClient`. Endpoint and token behavior can vary by 3x-ui release, so verify them in the authenticated API Docs for the deployed version before production use.
 
 ## Security checklist
 

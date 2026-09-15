@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar, decimal, text, index } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, timestamp, uniqueIndex, varchar, decimal, text, index, boolean } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -29,9 +29,59 @@ export const resellers = mysqlTable("resellers", {
   suffixUnique: uniqueIndex("resellers_suffix_unique").on(table.suffixCode),
 }));
 
+export const xuiNodes = mysqlTable("xuiNodes", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  baseUrl: varchar("baseUrl", { length: 500 }).notNull(),
+  apiTokenEncrypted: text("apiTokenEncrypted").notNull(),
+  status: mysqlEnum("status", ["active", "error", "disabled"]).default("active").notNull(),
+  lastSyncAt: timestamp("lastSyncAt"),
+  lastError: text("lastError"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => ({
+  urlUnique: uniqueIndex("xui_nodes_url_unique").on(table.baseUrl),
+}));
+
+export const xuiInbounds = mysqlTable("xuiInbounds", {
+  id: int("id").autoincrement().primaryKey(),
+  nodeId: int("nodeId").notNull(),
+  remoteId: int("remoteId").notNull(),
+  remark: varchar("remark", { length: 180 }).notNull(),
+  protocol: varchar("protocol", { length: 40 }),
+  port: int("port"),
+  settingsJson: text("settingsJson"),
+  streamSettingsJson: text("streamSettingsJson"),
+  active: boolean("active").default(true).notNull(),
+  syncedAt: timestamp("syncedAt").defaultNow().notNull(),
+}, table => ({
+  remoteUnique: uniqueIndex("xui_inbounds_remote_unique").on(table.nodeId, table.remoteId),
+  nodeIndex: index("xui_inbounds_node_idx").on(table.nodeId),
+}));
+
+export const resellerNodeAccess = mysqlTable("resellerNodeAccess", {
+  id: int("id").autoincrement().primaryKey(),
+  resellerId: int("resellerId").notNull(),
+  nodeId: int("nodeId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  accessUnique: uniqueIndex("reseller_node_access_unique").on(table.resellerId, table.nodeId),
+}));
+
+export const resellerInboundAccess = mysqlTable("resellerInboundAccess", {
+  id: int("id").autoincrement().primaryKey(),
+  resellerId: int("resellerId").notNull(),
+  inboundId: int("inboundId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => ({
+  accessUnique: uniqueIndex("reseller_inbound_access_unique").on(table.resellerId, table.inboundId),
+}));
+
 export const clients = mysqlTable("clients", {
   id: int("id").autoincrement().primaryKey(),
   resellerId: int("resellerId").notNull(),
+  nodeId: int("nodeId"),
+  inboundId: int("inboundId"),
   baseName: varchar("baseName", { length: 80 }).notNull(),
   username: varchar("username", { length: 120 }).notNull(),
   trafficGb: decimal("trafficGb", { precision: 12, scale: 2 }).notNull(),
@@ -64,9 +114,9 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Reseller = typeof resellers.$inferSelect;
 export type InsertReseller = typeof resellers.$inferInsert;
+export type XuiNode = typeof xuiNodes.$inferSelect;
+export type XuiInbound = typeof xuiInbounds.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type InsertClient = typeof clients.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
-
-// MVP ownership model: every client belongs to exactly one reseller.

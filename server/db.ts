@@ -8,8 +8,14 @@ import {
   auditLogs,
   clients,
   resellers,
+  resellerInboundAccess,
+  resellerNodeAccess,
   users,
+  xuiInbounds,
+  xuiNodes,
 } from "../drizzle/schema";
+import { encryptSecret } from "./crypto";
+import type { XuiInboundRecord } from "./xui";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -144,6 +150,9 @@ export async function updateResellerCredit(id: number, creditGb: string) {
 
 export async function createClientForReseller(data: {
   reseller: Reseller;
+  nodeId?: number;
+  inboundId?: number;
+  externalId?: string;
   baseName: string;
   trafficGb: string;
   ipLimit: number;
@@ -174,11 +183,14 @@ export async function createClientForReseller(data: {
     if (!creditUpdate || Number(creditUpdate.affectedRows ?? 0) !== 1) throw new Error("Credit changed; please retry");
     const result = await tx.insert(clients).values({
       resellerId: data.reseller.id,
+      nodeId: data.nodeId,
+      inboundId: data.inboundId,
       baseName,
       username,
       trafficGb: data.trafficGb,
       ipLimit: data.ipLimit,
       expiresAt,
+      externalId: data.externalId,
       notes: data.notes?.trim().slice(0, 500),
     });
     const inserted = await tx.select().from(clients).where(eq(clients.id, Number(result[0].insertId))).limit(1);
@@ -196,4 +208,96 @@ export async function getRecentAuditLogs(limit = 20) {
   const db = await getDb();
   if (!db) throw new Error("Database is not available");
   return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit);
+}
+
+export async function getXuiNodes() {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  return db.select({ id: xuiNodes.id, name: xuiNodes.name, baseUrl: xuiNodes.baseUrl, status: xuiNodes.status, lastSyncAt: xuiNodes.lastSyncAt, lastError: xuiNodes.lastError, createdAt: xuiNodes.createdAt }).from(xuiNodes).orderBy(desc(xuiNodes.createdAt));
+}
+
+export async function getXuiNode(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.select().from(xuiNodes).where(eq(xuiNodes.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createXuiNode(data: { name: string; baseUrl: string; apiToken: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const url = new URL(data.baseUrl).toString().replace(/\/$/, "");
+  const result = await db.insert(xuiNodes).values({ name: data.name.trim().slice(0, 120), baseUrl: url, apiTokenEncrypted: encryptSecret(data.apiToken.trim()) });
+  return getXuiNode(Number(result[0].insertId));
+}
+
+export async function markXuiNodeSync(id: number, status: "active" | "error", lastError: string | null = null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(xuiNodes).set({ status, lastSyncAt: new Date(), lastError }).where(eq(xuiNodes.id, id));
+}
+
+export async function syncXuiInbounds(nodeId: number, records: XuiInboundRecord[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.transaction(async tx => {
+    for (const record of records) {
+      await tx.insert(xuiInbounds).values({ nodeId, remoteId: record.id, remark: record.remark, protocol: record.protocol, port: record.port, settingsJson: record.settings ? JSON.stringify(record.settings) : null, streamSettingsJson: record.streamSettings ? JSON.stringify(record.streamSettings) : null, active: true, syncedAt: new Date() }).onDuplicateKeyUpdate({ set: { remark: record.remark, protocol: record.protocol, port: record.port, settingsJson: record.settings ? JSON.stringify(record.settings) : null, streamSettingsJson: record.streamSettings ? JSON.stringify(record.streamSettings) : null, active: true, syncedAt: new Date() } });
+    }
+  });
+  return getInboundsForNode(nodeId);
+}
+
+export async function getInboundsForNode(nodeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  return db.select().from(xuiInbounds).where(and(eq(xuiInbounds.nodeId, nodeId), eq(xuiInbounds.active, true))).orderBy(xuiInbounds.remark);
+}
+
+export async function getAllInbounds() {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  return db.select().from(xuiInbounds).where(eq(xuiInbounds.active, true)).orderBy(xuiInbounds.remark);
+}
+
+export async function getInboundById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.select().from(xuiInbounds).where(and(eq(xuiInbounds.id, id), eq(xuiInbounds.active, true))).limit(1);
+  return result[0];
+}
+
+export async function replaceResellerAccess(resellerId: number, nodeIds: number[], inboundIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.transaction(async tx => {
+    await tx.delete(resellerNodeAccess).where(eq(resellerNodeAccess.resellerId, resellerId));
+    await tx.delete(resellerInboundAccess).where(eq(resellerInboundAccess.resellerId, resellerId));
+    if (nodeIds.length) await tx.insert(resellerNodeAccess).values(nodeIds.map(nodeId => ({ resellerId, nodeId })));
+    if (inboundIds.length) await tx.insert(resellerInboundAccess).values(inboundIds.map(inboundId => ({ resellerId, inboundId })));
+  });
+}
+
+export async function getResellerAccess(resellerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const [nodeAccess, inboundAccess] = await Promise.all([
+    db.select().from(resellerNodeAccess).where(eq(resellerNodeAccess.resellerId, resellerId)),
+    db.select().from(resellerInboundAccess).where(eq(resellerInboundAccess.resellerId, resellerId)),
+  ]);
+  return { nodeIds: nodeAccess.map(row => row.nodeId), inboundIds: inboundAccess.map(row => row.inboundId) };
+}
+
+export async function canResellerUseInbound(resellerId: number, inboundId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.select({ id: resellerInboundAccess.id }).from(resellerInboundAccess).where(and(eq(resellerInboundAccess.resellerId, resellerId), eq(resellerInboundAccess.inboundId, inboundId))).limit(1);
+  return result.length > 0;
+}
+
+export async function canResellerUseNode(resellerId: number, nodeId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.select({ id: resellerNodeAccess.id }).from(resellerNodeAccess).where(and(eq(resellerNodeAccess.resellerId, resellerId), eq(resellerNodeAccess.nodeId, nodeId))).limit(1);
+  return result.length > 0;
 }

@@ -28,6 +28,7 @@ if [[ -z "$DB_PASSWORD" ]]; then
   DB_PASSWORD="$(openssl rand -hex 24)"
 fi
 JWT_SECRET="${JWT_SECRET:-$(openssl rand -base64 48 | tr -d '\n')}"
+XUI_TOKEN_ENCRYPTION_KEY="${XUI_TOKEN_ENCRYPTION_KEY:-$(openssl rand -base64 48 | tr -d '\n')}"
 
 if [[ -t 0 ]]; then
   read -r -p "Domain (optional, e.g. reseller.example.com): " DOMAIN_INPUT || true
@@ -79,6 +80,7 @@ install -d -m 750 "$APP_DIR"
 cat > "$APP_DIR/.env" <<ENV
 DATABASE_URL=mysql://$DB_USER:$DB_PASSWORD@127.0.0.1:3306/$DB_NAME
 JWT_SECRET=$JWT_SECRET
+XUI_TOKEN_ENCRYPTION_KEY=$XUI_TOKEN_ENCRYPTION_KEY
 VITE_APP_ID=$VITE_APP_ID
 OAUTH_SERVER_URL=$OAUTH_SERVER_URL
 VITE_OAUTH_PORTAL_URL=$VITE_OAUTH_PORTAL_URL
