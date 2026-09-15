@@ -4,6 +4,36 @@
 
 > **وضعیت فعلی:** این مخزن یک MVP قابل اجراست. مدیریت نماینده، کد پسوند یکتا، مالکیت کاربر، سهمیه، اعتبار و گزارش فعالیت پیاده‌سازی شده است. اتصال واقعی به API پنل 3x-ui برای ساخت و مدیریت Clientها باید در مرحله بعد اضافه شود؛ در نسخه فعلی نباید ساخت موفق کاربر در دیتابیس را معادل ساخت واقعی Client داخل 3x-ui در نظر گرفت.
 
+## نصب سریع پیشنهادی
+
+برای نصب روی یک VPS تازه Ubuntu/Debian، لازم نیست مراحل دستی طولانی را انجام دهید. اسکریپت زیر Node.js، pnpm، MySQL، Nginx، Certbot، دیتابیس، systemd، migration، تست و Build را آماده می‌کند:
+
+```bash
+sudo apt update && sudo apt install -y curl git
+git clone https://github.com/deragon02/xui-reseller-panel-pro.git
+cd xui-reseller-panel-pro
+sudo bash scripts/install.sh
+```
+
+در زمان اجرا، دامنه و OAuth App ID پرسیده می‌شود. برای نصب غیرتعاملی می‌توانید متغیرها را از قبل تعیین کنید:
+
+```bash
+sudo DOMAIN=reseller.example.com \
+  VITE_APP_ID=YOUR_MANUS_APP_ID \
+  bash scripts/install.sh
+```
+
+نصب‌کننده را فقط روی سروری اجرا کنید که کنترل آن را دارید. اگر مخزن Private است، ابتدا دسترسی GitHub با Deploy Key یا Credential حداقلی را روی سرور تنظیم کنید. اطلاعات 3x-ui هنوز به این MVP متصل نیست و نباید داخل اسکریپت یا GitHub قرار بگیرد.
+
+پس از نصب:
+
+```bash
+sudo systemctl status xui-reseller
+sudo journalctl -u xui-reseller -f
+```
+
+راهنمای انگلیسی: [README.en.md](README.en.md) | آموزش تصویری: [docs/visual-installation-guide.md](docs/visual-installation-guide.md)
+
 ## کاربرد پروژه
 
 این پنل برای سناریویی طراحی شده است که مدیر اصلی بتواند چند نماینده تعریف کند و هر نماینده فقط کاربران متعلق به خودش را بسازد و مدیریت کند.
@@ -135,7 +165,7 @@ pnpm build
 فایل نمونه را کپی کنید:
 
 ```bash
-cp .env.example .env
+cp docs/env.template .env
 nano .env
 ```
 
@@ -371,7 +401,7 @@ sudo ufw enable
 git clone https://github.com/deragon02/xui-reseller-panel-pro.git
 cd xui-reseller-panel-pro
 pnpm install
-cp .env.example .env
+cp docs/env.template .env
 pnpm check
 pnpm test
 pnpm dev
@@ -396,7 +426,7 @@ server/routers.ts               رویه‌های tRPC و کنترل دسترس�
 drizzle/schema.ts               جداول کاربران، نماینده‌ها، Clientها و لاگ‌ها
 server/db.ts                    منطق مالکیت، پسوند و اعتبار
 server/*.test.ts                تست‌های Backend
-.env.example                    نمونه تنظیمات محیطی
+docs/env.template               نمونه تنظیمات محیطی بدون Secret
 ```
 
 ## وضعیت انتشار
@@ -410,3 +440,82 @@ server/*.test.ts                تست‌های Backend
 ## مجوز و مسئولیت استفاده
 
 این پروژه برای استفاده مدیریتی روی سرورهای تحت اختیار شما طراحی شده است. قبل از استفاده تجاری، کنترل دسترسی، Backup، HTTPS، قوانین ارائه‌دهنده VPS و نحوه استفاده از API پنل 3x-ui را بررسی کنید.
+
+
+## نسخه‌بندی و به‌روزرسانی
+
+نسخه فعلی پروژه در `package.json` و `shared/version.ts` تعریف شده است و در این مرحله **1.0.0** است. برای نسخه‌های بعدی، مقدار `version` را با الگوی Semantic Versioning تغییر دهید:
+
+```text
+MAJOR.MINOR.PATCH
+1.0.0  → نسخه اولیه
+1.1.0  → قابلیت جدید بدون ناسازگاری
+1.1.1  → اصلاح خطا یا وصله امنیتی
+2.0.0  → تغییر ناسازگار در API یا معماری
+```
+
+پنل نسخه فعلی را نمایش می‌دهد و برای Admin امکان بررسی انتشار جدید GitHub را دارد. نصب خودکار از داخل داشبورد عمداً فعال نشده است، چون به‌روزرسانی بدون Backup و بررسی سلامت می‌تواند باعث قطع سرویس یا تغییر دیتابیس شود.
+
+### به‌روزرسانی امن روی VPS
+
+```bash
+cd /opt/xui-reseller-panel
+sudo APP_DIR=/opt/xui-reseller-panel SERVICE_NAME=xui-reseller bash scripts/update.sh
+```
+
+این اسکریپت:
+
+1. نسخه فعلی، commit و فایل `.env` را Backup می‌کند؛
+2. آخرین کد شاخه `main` را با `git pull --ff-only` دریافت می‌کند؛
+3. وابستگی‌ها را نصب می‌کند؛
+4. TypeScript، تست‌ها و migration را اجرا می‌کند؛
+5. Build جدید می‌سازد؛
+6. سرویس systemd را Restart و Health آن را بررسی می‌کند؛
+7. اگر مرحله‌ای شکست بخورد، commit قبلی را برمی‌گرداند و سرویس را دوباره Build می‌کند.
+
+پس از هر انتشار مهم، پیشنهاد می‌شود قبل از Update یک Backup مستقل از دیتابیس نیز بگیرید:
+
+```bash
+sudo mysqldump --single-transaction xui_reseller \
+  | gzip > /var/backups/xui-reseller/db-$(date -u +%Y%m%d-%H%M%S).sql.gz
+```
+
+### انتشار نسخه جدید در GitHub
+
+```bash
+# در محیط توسعه
+npm version patch       # یا minor / major
+pnpm check
+pnpm test
+pnpm build
+git add package.json shared/version.ts
+ git commit -m "release: v1.0.1"
+git tag v1.0.1
+git push origin main --tags
+```
+
+برای اینکه بررسی نسخه داخل پنل آن را پیدا کند، یک GitHub Release با همان Tag بسازید. نام Tag باید با نسخه پروژه هماهنگ باشد؛ مثلاً `v1.0.1`.
+
+> به‌روزرسانی خودکار نباید با اطلاعات ورود کاربر، Token پنل 3x-ui یا Secretهای داخل GitHub انجام شود. اجرای `scripts/update.sh` باید فقط توسط مدیر سرور و از طریق SSH یا یک سیستم Deploy کنترل‌شده انجام شود.
+
+## منابع رسمی و ضروری
+
+برای نصب و نگهداری، از مستندات رسمی زیر استفاده کنید:
+
+- [Ubuntu Server Documentation](https://documentation.ubuntu.com/server/)
+- [Ubuntu OpenSSH Server Guide](https://documentation.ubuntu.com/server/how-to/security/openssh-server/)
+- [Ubuntu UFW Firewall Guide](https://documentation.ubuntu.com/server/how-to/security/firewalls/)
+- [Node.js Downloads](https://nodejs.org/en/download)
+- [Node.js Official Documentation](https://nodejs.org/docs/latest/api/)
+- [pnpm Installation](https://pnpm.io/installation)
+- [MySQL Reference Manual](https://dev.mysql.com/doc/refman/8.0/en/)
+- [MySQL Account Management](https://dev.mysql.com/doc/refman/8.0/en/access-control.html)
+- [Nginx Beginner's Guide](https://nginx.org/en/docs/beginners_guide.html)
+- [Nginx Proxy Module Documentation](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+- [Certbot Instructions](https://certbot.eff.org/instructions)
+- [3x-ui Official GitHub Repository](https://github.com/MHSanaei/3x-ui)
+- [3x-ui Releases](https://github.com/MHSanaei/3x-ui/releases)
+- [مستندات انگلیسی همین پروژه](README.en.md)
+- [آموزش تصویری و مرحله‌ای نصب](docs/visual-installation-guide.md)
+
+لینک‌های بالا فقط برای راهنمایی هستند. قبل از اجرای دستورها، نسخه سیستم‌عامل، روش نصب Node.js، دامنه، Firewall و سیاست‌های ارائه‌دهنده VPS خود را بررسی کنید.
