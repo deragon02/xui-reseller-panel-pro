@@ -104,6 +104,55 @@ export async function getAllClients() {
   return db.select().from(clients).orderBy(desc(clients.createdAt));
 }
 
+export async function getClientForReseller(clientId: number, resellerId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  const result = await db.select().from(clients).where(and(eq(clients.id, clientId), eq(clients.resellerId, resellerId))).limit(1);
+  return result[0];
+}
+
+export async function setClientStatus(clientId: number, resellerId: number, status: "active" | "disabled" | "expired") {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(clients).set({ status }).where(and(eq(clients.id, clientId), eq(clients.resellerId, resellerId)));
+  return getClientForReseller(clientId, resellerId);
+}
+
+export async function syncClientTraffic(clientId: number, resellerId: number, usedTrafficGb: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  await db.update(clients).set({ usedTrafficGb, lastTrafficSyncAt: new Date() }).where(and(eq(clients.id, clientId), eq(clients.resellerId, resellerId)));
+  return getClientForReseller(clientId, resellerId);
+}
+
+export async function renewClientForReseller(data: { clientId: number; resellerId: number; durationDays: number; additionalTrafficGb: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is not available");
+  if (data.durationDays < 1 || data.durationDays > 365) throw new Error("Renewal duration must be between 1 and 365 days");
+  if (data.additionalTrafficGb < 0 || data.additionalTrafficGb > 100000) throw new Error("Additional traffic is invalid");
+
+  return db.transaction(async tx => {
+    const clientRows = await tx.select().from(clients).where(and(eq(clients.id, data.clientId), eq(clients.resellerId, data.resellerId))).limit(1);
+    const client = clientRows[0];
+    if (!client) throw new Error("Client not found");
+    if (data.additionalTrafficGb > 0) {
+      const [creditUpdate] = await tx.update(resellers)
+        .set({ creditGb: sql`${resellers.creditGb} - ${data.additionalTrafficGb}` })
+        .where(and(eq(resellers.id, data.resellerId), gte(resellers.creditGb, data.additionalTrafficGb.toFixed(4))));
+      if (!creditUpdate || Number(creditUpdate.affectedRows ?? 0) !== 1) throw new Error("Not enough reseller credit for additional traffic");
+    }
+    const base = Math.max(Date.now(), client.expiresAt.getTime());
+    const expiresAt = new Date(base + data.durationDays * 24 * 60 * 60 * 1000);
+    await tx.update(clients).set({
+      expiresAt,
+      trafficGb: data.additionalTrafficGb > 0 ? sql`${clients.trafficGb} + ${data.additionalTrafficGb}` : client.trafficGb,
+      status: "active",
+    }).where(eq(clients.id, client.id));
+    const result = await tx.select().from(clients).where(eq(clients.id, client.id)).limit(1);
+    return result[0] as Client;
+  });
+}
+
 export function normalizeBaseName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
 }

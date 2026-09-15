@@ -20,6 +20,13 @@ export type XuiClientPayload = {
   enable?: boolean;
 };
 
+export type XuiClientTraffic = {
+  up: number;
+  down: number;
+  total?: number;
+  lastOnline?: number;
+};
+
 function normalizeBaseUrl(value: string) {
   const url = new URL(value);
   if (url.protocol !== "https:" && process.env.NODE_ENV === "production") throw new Error("XUI node URL must use HTTPS in production");
@@ -86,5 +93,25 @@ export class XuiApi {
   async deleteClient(email: string) {
     const response = await this.client.post(`/panel/api/clients/del/${encodeURIComponent(email)}`);
     return this.unwrap<any>(response, "client deletion");
+  }
+
+  async updateClient(email: string, payload: Partial<XuiClientPayload>) {
+    const response = await this.client.post(`/panel/api/clients/update/${encodeURIComponent(email)}`, {
+      ...payload,
+      email,
+      security: "auto",
+    });
+    return this.unwrap<any>(response, "client update");
+  }
+
+  async getClientTraffic(email: string): Promise<XuiClientTraffic> {
+    const response = await this.client.get(`/panel/api/clients/traffic/${encodeURIComponent(email)}`);
+    const traffic = this.unwrap<any>(response, "client traffic");
+    return {
+      up: Number(traffic?.up ?? 0),
+      down: Number(traffic?.down ?? 0),
+      total: Number(traffic?.total ?? Number(traffic?.up ?? 0) + Number(traffic?.down ?? 0)),
+      lastOnline: traffic?.lastOnline ? Number(traffic.lastOnline) : undefined,
+    };
   }
 }

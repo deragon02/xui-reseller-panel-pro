@@ -15,6 +15,13 @@
       "when": 1789514524696,
       "tag": "0001_wakeful_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789516291239,
+      "tag": "0002_loose_white_queen",
+      "breakpoints": true
     }
   ]
 }

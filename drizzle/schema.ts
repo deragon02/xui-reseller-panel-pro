@@ -85,6 +85,7 @@ export const clients = mysqlTable("clients", {
   baseName: varchar("baseName", { length: 80 }).notNull(),
   username: varchar("username", { length: 120 }).notNull(),
   trafficGb: decimal("trafficGb", { precision: 12, scale: 2 }).notNull(),
+  usedTrafficGb: decimal("usedTrafficGb", { precision: 12, scale: 4 }).default("0.0000").notNull(),
   ipLimit: int("ipLimit").default(1).notNull(),
   expiresAt: timestamp("expiresAt").notNull(),
   status: mysqlEnum("status", ["active", "disabled", "expired"]).default("active").notNull(),
@@ -92,6 +93,7 @@ export const clients = mysqlTable("clients", {
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastTrafficSyncAt: timestamp("lastTrafficSyncAt"),
 }, table => ({
   usernameUnique: uniqueIndex("clients_username_unique").on(table.username),
   resellerIndex: index("clients_reseller_idx").on(table.resellerId),

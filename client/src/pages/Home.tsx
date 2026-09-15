@@ -19,8 +19,11 @@ import {
   LogIn,
   Menu,
   Plus,
+  Power,
+  RotateCcw,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   Users,
   WalletCards,
   X,
@@ -56,6 +59,10 @@ export default function Home() {
   const adminUsersQuery = trpc.admin.users.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const adminResellersQuery = trpc.admin.resellers.useQuery(undefined, { enabled: isAuthenticated && user?.role === "admin" });
   const createClient = trpc.reseller.createClient.useMutation();
+  const renewClient = trpc.reseller.renewClient.useMutation();
+  const toggleClient = trpc.reseller.toggleClient.useMutation();
+  const deleteClient = trpc.reseller.deleteClient.useMutation();
+  const syncTraffic = trpc.reseller.syncTraffic.useMutation();
   const availableInboundsQuery = trpc.reseller.availableInbounds.useQuery(undefined, { enabled: isAuthenticated && user?.role !== "admin" });
   const createReseller = trpc.admin.createReseller.useMutation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -72,11 +79,16 @@ export default function Home() {
     status: string;
     expiresAt: Date | string;
     ipLimit: number;
+    id?: number;
+    usedTrafficGb?: string;
+    lastTrafficSyncAt?: Date | string | null;
+    externalId?: string | null;
   }>;
   const suffix = reseller?.suffixCode ?? "AR-07";
   const credit = reseller ? Number(reseller.creditGb) : 186.4;
   const activeCount = clients.filter(client => client.status === "active").length;
   const totalTraffic = clients.reduce((sum, client) => sum + Number(client.trafficGb), 0);
+  const usedTraffic = clients.reduce((sum, client) => sum + Number(client.usedTrafficGb ?? 0), 0);
   const generatedUsername = useMemo(() => {
     const base = form.baseName.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
     return base ? `${base}-${suffix}` : `نام‌کاربری-${suffix}`;
@@ -111,6 +123,56 @@ export default function Home() {
       await summaryQuery.refetch();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "ساخت کاربر انجام نشد");
+    }
+  };
+
+  const handleSyncTraffic = async (client: typeof clients[number]) => {
+    if (isDemo || !client.id) return toast.info("این رکورد فقط پیش‌نمایش است");
+    try {
+      await syncTraffic.mutateAsync({ clientId: client.id });
+      await summaryQuery.refetch();
+      toast.success("مصرف از ثنایی به‌روزرسانی شد");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "همگام‌سازی مصرف ناموفق بود");
+    }
+  };
+
+  const handleToggle = async (client: typeof clients[number]) => {
+    if (isDemo || !client.id) return toast.info("این رکورد فقط پیش‌نمایش است");
+    const enable = client.status !== "active";
+    try {
+      await toggleClient.mutateAsync({ clientId: client.id, enable });
+      await summaryQuery.refetch();
+      toast.success(enable ? "کاربر فعال شد" : "کاربر غیرفعال شد");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تغییر وضعیت ناموفق بود");
+    }
+  };
+
+  const handleDelete = async (client: typeof clients[number]) => {
+    if (isDemo || !client.id) return toast.info("این رکورد فقط پیش‌نمایش است");
+    if (!window.confirm(`کاربر ${client.username} از ثنایی حذف شود؟`)) return;
+    try {
+      await deleteClient.mutateAsync({ clientId: client.id });
+      await summaryQuery.refetch();
+      toast.success("کاربر از ثنایی حذف شد");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "حذف کاربر ناموفق بود");
+    }
+  };
+
+  const handleRenew = async (client: typeof clients[number]) => {
+    if (isDemo || !client.id) return toast.info("این رکورد فقط پیش‌نمایش است");
+    const durationDays = Number(window.prompt("چند روز تمدید شود؟", "30"));
+    if (!Number.isInteger(durationDays) || durationDays < 1) return;
+    const additionalTrafficGb = Number(window.prompt("حجم اضافه (GB)؛ برای بدون تغییر 0 وارد کنید", "0"));
+    if (!Number.isFinite(additionalTrafficGb) || additionalTrafficGb < 0) return;
+    try {
+      await renewClient.mutateAsync({ clientId: client.id, durationDays, additionalTrafficGb });
+      await summaryQuery.refetch();
+      toast.success("کاربر با موفقیت تمدید شد");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تمدید کاربر ناموفق بود");
     }
   };
 
@@ -151,14 +213,14 @@ export default function Home() {
       <main className="min-h-screen lg:mr-[250px]">
         <header className="sticky top-0 z-20 flex h-[82px] items-center justify-between border-b border-slate-200/80 bg-[#f5f7fb]/90 px-5 backdrop-blur-xl sm:px-8 lg:px-11">
           <div className="flex items-center gap-3"><button className="rounded-xl border border-slate-200 bg-white p-2.5 text-slate-600 lg:hidden"><Menu size={18} /></button><div><p className="text-[11px] font-bold text-slate-400">چهارشنبه، ۲۵ شهریور ۱۴۰۵</p><h1 className="mt-1 text-[17px] font-black tracking-tight text-[#163e37]">مرکز کنترل نمایندگی</h1></div></div>
-          <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-[#cfe8dc] bg-[#eef9f3] px-3 py-2 text-[11px] font-bold text-[#267656] sm:flex"><span className="h-2 w-2 animate-pulse rounded-full bg-[#36b47d]" /> اتصال امن برقرار است</div><span className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 font-mono text-[10px] font-bold text-slate-400 sm:inline">v{versionQuery.data?.current ?? "1.1.1"}</span><div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 pl-3 shadow-sm"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#dff3e8] text-xs font-black text-[#12624a]">{user?.name?.slice(0, 1) ?? "AR"}</div><span className="hidden text-[12px] font-bold text-slate-700 sm:block">{user?.name ?? "نماینده آزمایشی"}</span><ChevronDown size={14} className="text-slate-400" /></div></div>
+          <div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-full border border-[#cfe8dc] bg-[#eef9f3] px-3 py-2 text-[11px] font-bold text-[#267656] sm:flex"><span className="h-2 w-2 animate-pulse rounded-full bg-[#36b47d]" /> اتصال امن برقرار است</div><span className="hidden rounded-full border border-slate-200 bg-white px-3 py-2 font-mono text-[10px] font-bold text-slate-400 sm:inline">v{versionQuery.data?.current ?? "1.2.0"}</span><div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 pl-3 shadow-sm"><div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#dff3e8] text-xs font-black text-[#12624a]">{user?.name?.slice(0, 1) ?? "AR"}</div><span className="hidden text-[12px] font-bold text-slate-700 sm:block">{user?.name ?? "نماینده آزمایشی"}</span><ChevronDown size={14} className="text-slate-400" /></div></div>
         </header>
 
         <div className="mx-auto max-w-[1480px] px-5 py-7 sm:px-8 lg:px-11 lg:py-9">
           <section className="relative overflow-hidden rounded-[28px] bg-[#0d3b33] px-7 py-8 text-white shadow-[0_18px_45px_rgba(13,59,51,0.14)] sm:px-10 sm:py-10">
             <div className="absolute -left-20 -top-28 h-72 w-72 rounded-full border-[30px] border-white/[0.04]" /><div className="absolute bottom-[-120px] right-[38%] h-72 w-72 rounded-full border-[44px] border-[#86e0b7]/[0.05]" />
             <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_340px]">
-              <div><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#bdecd5]"><Gauge size={13} /> نسخه MVP امن و مالکیت‌محور</div><h2 className="max-w-[610px] text-3xl font-black leading-[1.35] tracking-tight sm:text-[38px]">فروش امن،<br /><span className="text-[#88e3b7]">مالکیت روشن.</span></h2><p className="mt-4 max-w-[570px] text-[13px] font-medium leading-7 text-white/65">برای هر نماینده یک کد اختصاصی تعریف کن؛ هر کاربری که می‌سازد با همان پسوند ثبت می‌شود و تداخل نام بین نماینده‌ها از ریشه کنترل می‌شود.</p><div className="mt-7 flex flex-wrap items-center gap-3"><Button onClick={() => setIsCreateOpen(true)} className="h-11 rounded-xl bg-[#9ae6c3] px-5 text-[12px] font-black text-[#0d3b33] hover:bg-[#b3f0d3]"><Plus size={16} className="ml-2" /> ساخت کاربر جدید</Button><button onClick={() => toast.info("اتصال API به 3x-ui در مرحله بعد فعال می‌شود")} className="flex h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-[12px] font-bold text-white/80 transition hover:bg-white/10">راهنمای اتصال <ArrowLeft size={15} /></button></div></div>
+              <div><div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#bdecd5]"><Gauge size={13} /> نسخه MVP امن و مالکیت‌محور</div><h2 className="max-w-[610px] text-3xl font-black leading-[1.35] tracking-tight sm:text-[38px]">فروش امن،<br /><span className="text-[#88e3b7]">مالکیت روشن.</span></h2><p className="mt-4 max-w-[570px] text-[13px] font-medium leading-7 text-white/65">برای هر نماینده یک کد اختصاصی تعریف کن؛ هر کاربری که می‌سازد با همان پسوند ثبت می‌شود و تداخل نام بین نماینده‌ها از ریشه کنترل می‌شود.</p><div className="mt-7 flex flex-wrap items-center gap-3"><Button onClick={() => setIsCreateOpen(true)} className="h-11 rounded-xl bg-[#9ae6c3] px-5 text-[12px] font-black text-[#0d3b33] hover:bg-[#b3f0d3]"><Plus size={16} className="ml-2" /> ساخت کاربر جدید</Button><button onClick={() => toast.info("اتصال به API v3.8.0 فعال است؛ از بخش مدیریت Node و Inbound را بررسی کنید")} className="flex h-11 items-center gap-2 rounded-xl border border-white/15 px-4 text-[12px] font-bold text-white/80 transition hover:bg-white/10">راهنمای اتصال <ArrowLeft size={15} /></button></div></div>
               <div className="relative rounded-[22px] border border-white/10 bg-white/[0.07] p-5 backdrop-blur-sm"><div className="flex items-center justify-between"><span className="text-[11px] font-bold text-white/55">کد اختصاصی شما</span><span className="rounded-full bg-[#85e1b5]/15 px-2 py-1 text-[9px] font-bold text-[#9ae6c3]">Unique</span></div><div className="mt-5 flex items-center gap-3"><span className="font-mono text-4xl font-black tracking-[0.12em] text-white">{suffix}</span><button onClick={() => { navigator.clipboard?.writeText(suffix); toast.success("کد کپی شد"); }} className="rounded-lg p-2 text-white/45 transition hover:bg-white/10 hover:text-white"><Copy size={16} /></button></div><div className="my-5 h-px bg-white/10" /><p className="text-[11px] leading-6 text-white/55">نمونه نام خروجی</p><p className="mt-1 font-mono text-[15px] font-bold text-[#9ae6c3]">sara-{suffix}</p><div className="mt-4 flex items-center gap-2 text-[10px] font-bold text-[#bdecd5]"><Check size={13} /> غیرقابل تکرار در کل پنل</div></div>
             </div>
           </section>
@@ -167,11 +229,11 @@ export default function Home() {
             <StatCard label="اعتبار باقی‌مانده" value={credit.toFixed(1)} unit="GB" icon={WalletCards} accent="green" trend="+۱۲٪ این ماه" />
             <StatCard label="کل کاربران ساخته‌شده" value={formatNumber(clients.length)} unit="کاربر" icon={Users} accent="blue" trend="+۸ این هفته" />
             <StatCard label="کاربران فعال" value={formatNumber(activeCount)} unit="نفر" icon={ShieldCheck} accent="purple" trend={`${Math.round((activeCount / Math.max(clients.length, 1)) * 100)}٪ از کل`} />
-            <StatCard label="حجم تخصیص‌یافته" value={totalTraffic.toFixed(1)} unit="GB" icon={ArrowUpLeft} accent="orange" trend="از سهمیه نماینده" />
+            <StatCard label="مصرف همگام‌شده" value={usedTraffic.toFixed(1)} unit="GB" icon={ArrowUpLeft} accent="orange" trend={`از ${totalTraffic.toFixed(1)} GB تخصیص‌یافته`} />
           </section>
 
           <section className="mt-8 grid gap-6 xl:grid-cols-[1fr_340px]">
-            <div className="rounded-[22px] border border-slate-200/90 bg-white p-5 shadow-[0_8px_28px_rgba(34,55,75,0.04)] sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="text-[16px] font-black text-[#173f38]">آخرین کاربران</h3><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{formatNumber(clients.length)} رکورد</span></div><p className="mt-1 text-[11px] text-slate-400">تمام کاربران با پسوند {suffix} قابل ردیابی هستند.</p></div><div className="flex items-center gap-2"><button onClick={() => summaryQuery.refetch()} className="rounded-xl border border-slate-200 p-2.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"><RefreshCw size={15} /></button><Button variant="outline" onClick={() => setActiveNav("کاربران من")} className="h-10 rounded-xl border-slate-200 px-3 text-[11px] font-bold">مشاهده همه <ArrowLeft size={14} className="mr-2" /></Button></div></div><div className="mt-6 overflow-x-auto"><table className="w-full min-w-[640px] text-right"><thead><tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400"><th className="pb-3 pr-2">نام کاربری</th><th className="pb-3">حجم</th><th className="pb-3">انقضا</th><th className="pb-3">IP Limit</th><th className="pb-3">وضعیت</th><th className="pb-3 pl-2">عملیات</th></tr></thead><tbody>{clients.map((client, index) => <tr key={`${client.username}-${index}`} className="group border-b border-slate-50 text-[12px] last:border-0"><td className="py-4 pr-2"><div className="flex items-center gap-3"><div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#edf8f2] text-[10px] font-black text-[#19805b]">{(client.baseName ?? client.username).slice(0, 2).toUpperCase()}</div><div><p className="font-mono text-[12px] font-bold text-slate-700">{client.username}</p><p className="mt-0.5 text-[10px] text-slate-400">مالک: شما</p></div></div></td><td className="py-4 font-bold text-slate-600">{Number(client.trafficGb).toFixed(0)} GB</td><td className="py-4 text-slate-500">{typeof client.expiresAt === "string" ? client.expiresAt : new Date(client.expiresAt).toLocaleDateString("fa-IR")}</td><td className="py-4 text-slate-500">{client.ipLimit}</td><td className="py-4"><Badge className={`rounded-full border-0 px-2.5 py-1 text-[10px] ${client.status === "active" ? "bg-[#e8f8ef] text-[#18734f]" : "bg-[#fff0e9] text-[#b55a2e]"}`}>{statusLabel(client.status)}</Badge></td><td className="py-4 pl-2"><button onClick={() => { navigator.clipboard?.writeText(client.username); toast.success("نام کاربری کپی شد"); }} className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"><Copy size={14} /></button></td></tr>)}</tbody></table></div></div>
+            <div className="rounded-[22px] border border-slate-200/90 bg-white p-5 shadow-[0_8px_28px_rgba(34,55,75,0.04)] sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><h3 className="text-[16px] font-black text-[#173f38]">آخرین کاربران</h3><span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{formatNumber(clients.length)} رکورد</span></div><p className="mt-1 text-[11px] text-slate-400">تمام کاربران با پسوند {suffix} قابل ردیابی هستند.</p></div><div className="flex items-center gap-2"><button onClick={() => summaryQuery.refetch()} className="rounded-xl border border-slate-200 p-2.5 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"><RefreshCw size={15} /></button><Button variant="outline" onClick={() => setActiveNav("کاربران من")} className="h-10 rounded-xl border-slate-200 px-3 text-[11px] font-bold">مشاهده همه <ArrowLeft size={14} className="mr-2" /></Button></div></div><div className="mt-6 overflow-x-auto"><table className="w-full min-w-[980px] text-right"><thead><tr className="border-b border-slate-100 text-[10px] font-bold text-slate-400"><th className="pb-3 pr-2">نام کاربری</th><th className="pb-3">حجم / مصرف</th><th className="pb-3">انقضا</th><th className="pb-3">IP Limit</th><th className="pb-3">وضعیت</th><th className="pb-3 pl-2">عملیات</th></tr></thead><tbody>{clients.map((client, index) => <tr key={`${client.username}-${index}`} className="group border-b border-slate-50 text-[12px] last:border-0"><td className="py-4 pr-2"><div className="flex items-center gap-3"><div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-[#edf8f2] text-[10px] font-black text-[#19805b]">{(client.baseName ?? client.username).slice(0, 2).toUpperCase()}</div><div><p className="font-mono text-[12px] font-bold text-slate-700">{client.username}</p><p className="mt-0.5 text-[10px] text-slate-400">مالک: شما</p></div></div></td><td className="py-4 font-bold text-slate-600"><span>{Number(client.trafficGb).toFixed(0)} GB</span><span className="mt-1 block text-[10px] font-medium text-slate-400">مصرف: {Number(client.usedTrafficGb ?? 0).toFixed(2)} GB</span></td><td className="py-4 text-slate-500">{typeof client.expiresAt === "string" ? client.expiresAt : new Date(client.expiresAt).toLocaleDateString("fa-IR")}</td><td className="py-4 text-slate-500">{client.ipLimit}</td><td className="py-4"><Badge className={`rounded-full border-0 px-2.5 py-1 text-[10px] ${client.status === "active" ? "bg-[#e8f8ef] text-[#18734f]" : "bg-[#fff0e9] text-[#b55a2e]"}`}>{statusLabel(client.status)}</Badge></td><td className="py-4 pl-2"><div className="flex items-center gap-1"><button title="همگام‌سازی مصرف" onClick={() => handleSyncTraffic(client)} className="rounded-lg p-2 text-slate-300 transition hover:bg-[#e8f5ef] hover:text-[#18734f]"><RefreshCw size={14} /></button><button title="تمدید" onClick={() => handleRenew(client)} className="rounded-lg p-2 text-slate-300 transition hover:bg-[#fff3df] hover:text-[#a66a1c]"><RotateCcw size={14} /></button><button title={client.status === "active" ? "غیرفعال‌سازی" : "فعال‌سازی"} onClick={() => handleToggle(client)} className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"><Power size={14} /></button><button title="حذف از ثنایی" onClick={() => handleDelete(client)} className="rounded-lg p-2 text-slate-300 transition hover:bg-[#fff0e9] hover:text-[#b55a2e]"><Trash2 size={14} /></button><button title="کپی نام کاربری" onClick={() => { navigator.clipboard?.writeText(client.username); toast.success("نام کاربری کپی شد"); }} className="rounded-lg p-2 text-slate-300 transition hover:bg-slate-100 hover:text-slate-600"><Copy size={14} /></button></div></td></tr>)}</tbody></table></div></div>
             <div className="rounded-[22px] border border-slate-200/90 bg-white p-6 shadow-[0_8px_28px_rgba(34,55,75,0.04)]"><div className="flex items-center justify-between"><div><h3 className="text-[16px] font-black text-[#173f38]">قوانین نمایندگی</h3><p className="mt-1 text-[11px] text-slate-400">محدودیت‌های اعمال‌شده توسط مدیر</p></div><CircleAlert size={17} className="text-[#e5a04a]" /></div><div className="mt-6 space-y-4"><Rule label="حداکثر حجم هر کاربر" value={`${reseller ? Number(reseller.maxTrafficGb) || "بدون سقف" : 50} GB`} /><Rule label="حداکثر روز اعتبار" value={`${reseller?.maxDays ?? 30} روز`} /><Rule label="حداکثر IP Limit" value={`${reseller?.maxIpLimit ?? 3} دستگاه`} /><Rule label="شناسه مالکیت" value={suffix} mono /></div><div className="mt-6 rounded-[14px] bg-[#f6faf8] p-3.5 text-[11px] font-medium leading-6 text-slate-500"><span className="font-bold text-[#17724f]">نکته:</span> کد نمایندگی بخشی از Username است و توسط Backend قابل حذف یا دورزدن نیست.</div></div>
           </section>
         </div>
@@ -240,7 +302,7 @@ function AdminView({ users, resellers, form, setForm, createReseller }: { users:
   };
 
   return <div dir="rtl" className="min-h-screen bg-[#f5f7fb] text-slate-900">
-    <header className="flex h-[82px] items-center justify-between border-b border-slate-200/80 bg-white px-5 sm:px-10"><div><p className="text-[11px] font-bold text-slate-400">مدیریت دسترسی و نسخه</p><h1 className="mt-1 text-[18px] font-black text-[#163e37]">پنل مدیر سیستم</h1></div><div className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-2 text-[10px] font-bold sm:inline ${updateQuery.data?.updateAvailable ? "bg-[#fff3df] text-[#a66a1c]" : "bg-slate-100 text-slate-500"}`}>{updateQuery.data?.updateAvailable ? `نسخه جدید ${updateQuery.data.latest} موجود است` : `نسخه ${updateQuery.data?.current ?? "1.1.1"}`}</span><div className="flex items-center gap-2 rounded-full bg-[#e8f5ef] px-3 py-2 text-[11px] font-bold text-[#12624a]"><ShieldCheck size={15} /> کنترل مالکیت فعال است</div></div></header>
+    <header className="flex h-[82px] items-center justify-between border-b border-slate-200/80 bg-white px-5 sm:px-10"><div><p className="text-[11px] font-bold text-slate-400">مدیریت دسترسی و نسخه</p><h1 className="mt-1 text-[18px] font-black text-[#163e37]">پنل مدیر سیستم</h1></div><div className="flex items-center gap-2"><span className={`hidden rounded-full px-3 py-2 text-[10px] font-bold sm:inline ${updateQuery.data?.updateAvailable ? "bg-[#fff3df] text-[#a66a1c]" : "bg-slate-100 text-slate-500"}`}>{updateQuery.data?.updateAvailable ? `نسخه جدید ${updateQuery.data.latest} موجود است` : `نسخه ${updateQuery.data?.current ?? "1.2.0"}`}</span><div className="flex items-center gap-2 rounded-full bg-[#e8f5ef] px-3 py-2 text-[11px] font-bold text-[#12624a]"><ShieldCheck size={15} /> کنترل مالکیت فعال است</div></div></header>
     <main className="mx-auto max-w-[1280px] px-5 py-8 sm:px-10">
       <section className="rounded-[26px] bg-[#0d3b33] p-7 text-white shadow-[0_18px_45px_rgba(13,59,51,0.14)] sm:p-9"><div className="flex flex-wrap items-end justify-between gap-6"><div><span className="rounded-full bg-white/10 px-3 py-1.5 text-[10px] font-bold text-[#bdecd5]">Admin / XUI Control Center</span><h2 className="mt-5 text-3xl font-black tracking-tight">اتصال واقعی به پنل‌های ثنایی</h2><p className="mt-3 max-w-[720px] text-[13px] leading-7 text-white/65">آدرس پنل و API Token را اضافه کنید؛ این سیستم اینباندها را Sync می‌کند و سپس دسترسی هر نماینده را محدود می‌سازد.</p></div><div className="rounded-2xl border border-white/10 bg-white/[0.08] px-5 py-4"><p className="text-[10px] text-white/50">پنل‌های متصل</p><p className="mt-2 text-3xl font-black text-[#9ae6c3]">{nodesQuery.data?.length ?? 0}</p></div></div></section>
       <section className="mt-7 grid gap-6 lg:grid-cols-[380px_1fr]"><div className="rounded-[22px] border border-slate-200 bg-white p-6 shadow-sm"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e8f5ef] text-[#18734f]"><Plus size={18} /></div><div><h3 className="text-[16px] font-black text-[#173f38]">نماینده جدید</h3><p className="mt-1 text-[10px] text-slate-400">کد را مثل AR-07 انتخاب کنید.</p></div></div><div className="mt-6 space-y-4"><div><Label className="mb-2 block text-[11px] font-bold text-slate-600">کاربر سیستم</Label><select value={form.userId} onChange={event => setForm({ ...form, userId: event.target.value })} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-[12px] outline-none focus:border-[#52b98d]"><option value="">انتخاب کاربر OAuth</option>{users.filter(item => item.role !== "admin").map(item => <option key={item.id} value={item.id}>{item.name || item.email || `User #${item.id}`}</option>)}</select></div><AdminField label="نام نماینده" value={form.displayName} onChange={value => setForm({ ...form, displayName: value })} placeholder="مثلاً آرمان نت" /><AdminField label="کد پسوند یکتا" value={form.suffixCode} onChange={value => setForm({ ...form, suffixCode: value.toUpperCase() })} placeholder="مثلاً AR-07" mono /><div className="grid grid-cols-2 gap-3"><AdminField label="اعتبار اولیه (GB)" value={form.creditGb} onChange={value => setForm({ ...form, creditGb: value })} type="number" /><AdminField label="سقف هر کاربر (GB)" value={form.maxTrafficGb} onChange={value => setForm({ ...form, maxTrafficGb: value })} type="number" /><AdminField label="حداکثر روز" value={form.maxDays} onChange={value => setForm({ ...form, maxDays: value })} type="number" /><AdminField label="حداکثر IP" value={form.maxIpLimit} onChange={value => setForm({ ...form, maxIpLimit: value })} type="number" /></div></div><Button onClick={submit} disabled={createReseller.isPending} className="mt-6 h-11 w-full rounded-xl bg-[#0d3b33] text-[12px] font-black hover:bg-[#145346]">{createReseller.isPending ? "در حال ثبت..." : "ثبت نماینده"}</Button></div>

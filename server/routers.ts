@@ -15,6 +15,7 @@ import {
   getAllClients,
   getAllInbounds,
   getAllResellers,
+  getClientForReseller,
   getClientsForReseller,
   getInboundById,
   getRecentAuditLogs,
@@ -27,6 +28,9 @@ import {
   markXuiNodeSync,
   normalizeSuffixCode,
   replaceResellerAccess,
+  renewClientForReseller,
+  setClientStatus,
+  syncClientTraffic,
   syncXuiInbounds,
   updateResellerCredit,
   writeAuditLog,
@@ -54,6 +58,8 @@ const clientInput = z.object({
 
 const nodeInput = z.object({ name: z.string().trim().min(2).max(120), baseUrl: z.string().url(), apiToken: z.string().trim().min(10).max(2000) });
 const accessInput = z.object({ resellerId: z.number().int().positive(), nodeIds: z.array(z.number().int().positive()).max(100), inboundIds: z.array(z.number().int().positive()).max(500) });
+const clientActionInput = z.object({ clientId: z.number().int().positive() });
+const renewInput = clientActionInput.extend({ durationDays: z.number().int().min(1).max(365), additionalTrafficGb: z.number().min(0).max(100_000) });
 
 function assertActiveReseller(reseller: Awaited<ReturnType<typeof getResellerByUserId>>) {
   if (!reseller || reseller.status !== "active") throw new TRPCError({ code: "FORBIDDEN", message: "Reseller account is not active" });
@@ -166,6 +172,72 @@ export const appRouter = router({
         return client;
       } catch (error) {
         throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "3x-ui client creation failed" });
+      }
+    }),
+    syncTraffic: protectedProcedure.input(clientActionInput).mutation(async ({ ctx, input }) => {
+      if (ctx.user.role === "admin") throw new TRPCError({ code: "BAD_REQUEST", message: "Admin cannot sync reseller clients" });
+      const reseller = assertActiveReseller(await getResellerByUserId(ctx.user.id));
+      const client = await getClientForReseller(input.clientId, reseller.id);
+      if (!client?.nodeId || !client.externalId) throw new TRPCError({ code: "NOT_FOUND", message: "Client is not linked to 3x-ui" });
+      const node = await getXuiNode(client.nodeId);
+      if (!node || node.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "XUI node is not active" });
+      try {
+        const traffic = await new XuiApi(node).getClientTraffic(client.username);
+        const usedTrafficGb = ((traffic.total ?? traffic.up + traffic.down) / 1024 ** 3).toFixed(4);
+        const updated = await syncClientTraffic(client.id, reseller.id, usedTrafficGb);
+        await writeAuditLog({ actorUserId: ctx.user.id, resellerId: reseller.id, action: "client.traffic_synced", target: client.username, metadata: JSON.stringify({ usedTrafficGb }) });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Traffic sync failed" });
+      }
+    }),
+    toggleClient: protectedProcedure.input(clientActionInput.extend({ enable: z.boolean() })).mutation(async ({ ctx, input }) => {
+      if (ctx.user.role === "admin") throw new TRPCError({ code: "BAD_REQUEST", message: "Admin cannot toggle reseller clients" });
+      const reseller = assertActiveReseller(await getResellerByUserId(ctx.user.id));
+      const client = await getClientForReseller(input.clientId, reseller.id);
+      if (!client?.nodeId || !client.externalId) throw new TRPCError({ code: "NOT_FOUND", message: "Client is not linked to 3x-ui" });
+      const node = await getXuiNode(client.nodeId);
+      if (!node || node.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "XUI node is not active" });
+      try {
+        await new XuiApi(node).updateClient(client.username, { id: client.externalId, totalGB: Math.round(Number(client.trafficGb)), expiryTime: client.expiresAt.getTime(), limitIp: client.ipLimit, enable: input.enable });
+        const updated = await setClientStatus(client.id, reseller.id, input.enable ? "active" : "disabled");
+        await writeAuditLog({ actorUserId: ctx.user.id, resellerId: reseller.id, action: input.enable ? "client.enabled" : "client.disabled", target: client.username, metadata: JSON.stringify({ nodeId: node.id }) });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Client status update failed" });
+      }
+    }),
+    deleteClient: protectedProcedure.input(clientActionInput).mutation(async ({ ctx, input }) => {
+      if (ctx.user.role === "admin") throw new TRPCError({ code: "BAD_REQUEST", message: "Admin cannot delete reseller clients" });
+      const reseller = assertActiveReseller(await getResellerByUserId(ctx.user.id));
+      const client = await getClientForReseller(input.clientId, reseller.id);
+      if (!client?.nodeId || !client.externalId) throw new TRPCError({ code: "NOT_FOUND", message: "Client is not linked to 3x-ui" });
+      const node = await getXuiNode(client.nodeId);
+      if (!node || node.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "XUI node is not active" });
+      try {
+        await new XuiApi(node).deleteClient(client.username);
+        const updated = await setClientStatus(client.id, reseller.id, "disabled");
+        await writeAuditLog({ actorUserId: ctx.user.id, resellerId: reseller.id, action: "client.deleted_in_xui", target: client.username, metadata: JSON.stringify({ nodeId: node.id }) });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Client deletion failed" });
+      }
+    }),
+    renewClient: protectedProcedure.input(renewInput).mutation(async ({ ctx, input }) => {
+      if (ctx.user.role === "admin") throw new TRPCError({ code: "BAD_REQUEST", message: "Admin cannot renew reseller clients" });
+      const reseller = assertActiveReseller(await getResellerByUserId(ctx.user.id));
+      const client = await getClientForReseller(input.clientId, reseller.id);
+      if (!client?.nodeId || !client.externalId) throw new TRPCError({ code: "NOT_FOUND", message: "Client is not linked to 3x-ui" });
+      const node = await getXuiNode(client.nodeId);
+      if (!node || node.status !== "active") throw new TRPCError({ code: "BAD_REQUEST", message: "XUI node is not active" });
+      const expiryTime = Math.max(Date.now(), client.expiresAt.getTime()) + input.durationDays * 24 * 60 * 60 * 1000;
+      try {
+        await new XuiApi(node).updateClient(client.username, { id: client.externalId, totalGB: Math.round(Number(client.trafficGb) + input.additionalTrafficGb), expiryTime, limitIp: client.ipLimit, enable: true });
+        const updated = await renewClientForReseller({ clientId: client.id, resellerId: reseller.id, durationDays: input.durationDays, additionalTrafficGb: input.additionalTrafficGb });
+        await writeAuditLog({ actorUserId: ctx.user.id, resellerId: reseller.id, action: "client.renewed", target: client.username, metadata: JSON.stringify({ durationDays: input.durationDays, additionalTrafficGb: input.additionalTrafficGb }) });
+        return updated;
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "Client renewal failed" });
       }
     }),
   }),

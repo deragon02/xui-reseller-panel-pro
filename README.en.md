@@ -254,12 +254,12 @@ Only expose the HTTPS endpoint to end users.
 
 ## Versioning and updates
 
-The current release is defined in both `package.json` and `shared/version.ts`. The current feature release is `1.1.1`; the starting release was `1.0.0`. Use Semantic Versioning:
+The current release is defined in both `package.json` and `shared/version.ts`. The current feature release is `1.2.0`; the starting release was `1.0.0`. Use Semantic Versioning:
 
 ```text
 1.0.0 -> initial release
-1.1.1 -> backward-compatible feature
-1.1.1 -> bug/security fix
+1.2.0 -> backward-compatible feature
+1.2.1 -> bug/security fix
 2.0.0 -> breaking change
 ```
 
@@ -304,6 +304,10 @@ An admin can add one or more 3x-ui nodes from the dashboard by entering a name, 
 When a reseller creates a client, the backend checks the reseller status, confirms that the selected inbound belongs to the selected node, verifies the reseller grant and quota, calls the 3x-ui API, and stores the returned external client identifier locally. API tokens are encrypted with AES-256-GCM and never returned to the frontend.
 
 The current adapter targets the latest official release verified during this update, **3x-ui v3.8.0**: `Authorization: Bearer`, `/panel/api/inbounds/list`, and `/panel/api/clients/add` with the `client + inboundIds` payload. Endpoint and token behavior can vary by release, so verify them in the authenticated API Docs for the deployed version before production use.
+
+### Client lifecycle and traffic
+
+From the reseller client table, a reseller can renew a client for a selected number of days and optionally purchase additional traffic; any additional traffic is deducted from reseller credit. The same table provides enable/disable, deletion from 3x-ui, and manual traffic synchronization. 3x-ui returns traffic counters in bytes, so the panel converts them to GB and stores the last synchronization timestamp locally.
 
 ## Security checklist
 
