@@ -175,3 +175,38 @@
     }
   }
 }
+
+
+@layer base {
+  html {
+    font-family: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    min-width: 320px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: "IBM Plex Mono", "Vazirmatn", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+::selection {
+  background: #cdeedc;
+  color: #0d3b33;
+}
