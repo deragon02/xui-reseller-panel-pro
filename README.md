@@ -8,6 +8,14 @@
 
 برای نصب روی یک VPS تازه Ubuntu/Debian، لازم نیست مراحل دستی طولانی را انجام دهید. اسکریپت زیر Node.js، pnpm، MySQL، Nginx، Certbot، دیتابیس، systemd، migration، تست و Build را آماده می‌کند:
 
+### نصب تک‌خطی
+
+```bash
+tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/deragon02/xui-reseller-panel-pro/main/scripts/install.sh -o "$tmp" && sudo bash "$tmp"; rc=$?; rm -f "$tmp"; exit $rc
+```
+
+این روش فایل را ابتدا دانلود می‌کند و سپس اجرا می‌کند و از `curl | bash` مستقیم امن‌تر است.
+
 ```bash
 sudo apt update && sudo apt install -y curl git
 git clone https://github.com/deragon02/xui-reseller-panel-pro.git

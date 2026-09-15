@@ -8,6 +8,14 @@ A standalone Persian/RTL reseller management panel for 3x-ui / X-UI deployments.
 
 For a fresh Ubuntu/Debian VPS, the recommended path is the installer. It installs Node.js, pnpm, MySQL, Nginx, Certbot, the database, systemd service, migrations, tests, and the production build:
 
+### One-line installer
+
+```bash
+tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/deragon02/xui-reseller-panel-pro/main/scripts/install.sh -o "$tmp" && sudo bash "$tmp"; rc=$?; rm -f "$tmp"; exit $rc
+```
+
+The script is downloaded to a temporary file before execution instead of piping `curl` directly into `bash`.
+
 ```bash
 sudo apt update && sudo apt install -y curl git
 git clone https://github.com/deragon02/xui-reseller-panel-pro.git
